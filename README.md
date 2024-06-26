@@ -24,6 +24,12 @@ The server will run on `http://localhost:3000`.
 
 # MongoDB
 
+ Install MongoDB and mongoose:
+ ```sh
+ npm install mongodb
+ npm install mongoose
+ ```
+
 ## Setup Instructions
 
 ### Prerequisites
