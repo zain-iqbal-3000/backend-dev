@@ -1,6 +1,5 @@
 # User API
-
-A simple REST API to manage users using Node.js and Express.
+This project is a basic REST API built with Node.js, Express, and MongoDB using Mongoose. It handles CRUD operations for a "users" resource.
 
 ## Setup
 
@@ -22,13 +21,16 @@ A simple REST API to manage users using Node.js and Express.
 
 The server will run on `http://localhost:3000`.
 
-## API Endpoints
 
-- `GET /users` - Retrieve all users.
-- `POST /users` - Create a new user.
-- `GET /users/:id` - Retrieve a user by ID.
-- `PUT /users/:id` - Update a user by ID.
-- `DELETE /users/:id` - Delete a user by ID.
+#MongoDB
+
+## Setup Instructions
+
+### Prerequisites
+
+- Node.js and npm installed
+- MongoDB Atlas account
+
 
 ## Testing
 
