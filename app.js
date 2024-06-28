@@ -7,9 +7,8 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Replace with your MongoDB Atlas connection string
-const dbURI = 'mongodb+srv://zainiqbal35201:zu7MHuHD5vPlGkSC@cluster0.z5tiocc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
-mongoose.connect(dbURI, {
+const dbURL = 'mongodb+srv://zainiqbal35201:zu7MHuHD5vPlGkSC@cluster0.z5tiocc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
+mongoose.connect(dbURL, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 }).then(() => {
@@ -18,16 +17,18 @@ mongoose.connect(dbURI, {
   console.error('Error connecting to MongoDB', err);
 });
 
-// Define User schema and model
+
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }
+  password: { type: String, required: true },
+  role: { type: String, enum: ['user', 'admin'], default: 'user' }
 });
+
 
 const User = mongoose.model('User', userSchema);
 
-// Middleware to verify JWT
+
 const verifyToken = (req, res, next) => {
   const token = req.header('auth-token');
   if (!token) return res.status(401).send('Access Denied');
@@ -41,16 +42,26 @@ const verifyToken = (req, res, next) => {
   }
 };
 
+const checkRole = (role) => {
+  return (req, res, next) => {
+    if (req.user.role !== role) {
+      return res.status(403).send('Access Denied');
+    }
+    next();
+  };
+};
+
 // POST /register
 app.post('/register', async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
 
   const user = new User({
     name,
     email,
-    password: hashedPassword
+    password: hashedPassword,
+    role: role || 'user'
   });
 
   try {
@@ -95,6 +106,16 @@ app.get('/users/:id', async (req, res) => {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+//GET /admin/users
+app.get('/admin/users', verifyToken, checkRole('admin'), async (req, res) => {
+  try {
+    const users = await User.find();
+    res.json(users);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
