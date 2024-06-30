@@ -41,7 +41,13 @@ This project is a REST API built with Node.js, Express, and MongoDB. It includes
     - Create a MongoDB Atlas account and set up a cluster.
     - Get your connection string.
 
-4. **Configure environment variables:**
+4. **Install Swagger:**
+
+    ```sh
+    npm install swagger-jsdoc swagger-ui-express
+    ```
+
+5. **Configure environment variables:**
 
     Create a `.env` file in the root of the project and add your MongoDB connection string and JWT secret:
 
@@ -57,6 +63,7 @@ This project is a REST API built with Node.js, Express, and MongoDB. It includes
 - jsonwebtoken
 - bcryptjs
 - dotenv
+- swagger
 - nodemon (for development)
 
 ## Environment Variables

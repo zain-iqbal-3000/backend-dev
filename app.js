@@ -1,155 +1,116 @@
+// Proposed fix for MongoDB connection options deprecation warnings
+
 const express = require('express');
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const app = express();
-const PORT = 3000;
+const bcrypt = require('bcryptjs');
+const swaggerUi = require('swagger-ui-express');
+const specs = require('./swaggerConfig');
 
+const app = express();
 app.use(express.json());
 
-const dbURL = 'mongodb+srv://zainiqbal35201:zu7MHuHD5vPlGkSC@cluster0.z5tiocc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
-mongoose.connect(dbURL, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => {
-  console.log('Connected to MongoDB Atlas');
-}).catch((err) => {
-  console.error('Error connecting to MongoDB', err);
-});
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
+// Updated MongoDB connection string without deprecated options
+const dbURL = 'mongodb+srv://zainiqbal35201:zu7MHuHD5vPlGkSC@cluster0.z5tiocc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
+mongoose.connect(dbURL)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.log('Error connecting to MongoDB', err));
 
 const userSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  name: String,
+  email: { type: String, unique: true },
+  password: String,
   role: { type: String, enum: ['user', 'admin'], default: 'user' }
 });
 
-
 const User = mongoose.model('User', userSchema);
 
+// Register endpoint
+app.post('/register', async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ name, email, password: hashedPassword, role });
+    await user.save();
+    res.status(201).send('User registered successfully');
+  } catch (error) {
+    res.status(400).send('Error registering user');
+  }
+});
 
-const verifyToken = (req, res, next) => {
+// Login endpoint
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(400).send('Invalid credentials');
+    }
+    const token = jwt.sign({ userId: user._id, role: user.role }, 'your_jwt_secret');
+    res.send({ token });
+  } catch (error) {
+    res.status(400).send('Error logging in');
+  }
+});
+
+// Middleware for protected routes
+const authMiddleware = (req, res, next) => {
   const token = req.header('auth-token');
   if (!token) return res.status(401).send('Access Denied');
-
   try {
-    const verified = jwt.verify(token, 'yourJWTSecret');
+    const verified = jwt.verify(token, 'your_jwt_secret');
     req.user = verified;
     next();
-  } catch (err) {
-    res.status(400).send('Invalid Token');
+  } catch (error) {
+    res.status(400).send('Invalid token');
   }
 };
 
-const checkRole = (role) => {
-  return (req, res, next) => {
-    if (req.user.role !== role) {
-      return res.status(403).send('Access Denied');
-    }
-    next();
-  };
+// Middleware for role-based access
+const roleMiddleware = (role) => (req, res, next) => {
+  if (req.user.role !== role) return res.status(403).send('Access Denied');
+  next();
 };
 
-// POST /register
-app.post('/register', async (req, res) => {
-  const { name, email, password, role } = req.body;
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
-
-  const user = new User({
-    name,
-    email,
-    password: hashedPassword,
-    role: role || 'user'
-  });
-
-  try {
-    const savedUser = await user.save();
-    res.status(201).json(savedUser);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
+// Protected route - Get all users (Admin only)
+app.get('/admin/users', authMiddleware, roleMiddleware('admin'), async (req, res) => {
+  const users = await User.find();
+  res.send(users);
 });
 
-// POST /login
-app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).send('Email or password is wrong');
-
-    const validPass = await bcrypt.compare(password, user.password);
-    if (!validPass) return res.status(400).send('Invalid password');
-
-    const token = jwt.sign({ _id: user._id }, 'yourJWTSecret', { expiresIn: '1h' });
-    res.header('auth-token', token).send({ token });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// GET /users (Protected Route)
-app.get('/users', verifyToken, async (req, res) => {
-  try {
-    const users = await User.find();
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// GET /users/:id
-app.get('/users/:id', async (req, res) => {
+// Get user by ID
+app.get('/users/:id', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.send(user);
+  } catch (error) {
+    res.status(400).send('User not found');
   }
 });
 
-//GET /admin/users
-app.get('/admin/users', verifyToken, checkRole('admin'), async (req, res) => {
+// Update user
+app.put('/users/:id', authMiddleware, async (req, res) => {
   try {
-    const users = await User.find();
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.send(user);
+  } catch (error) {
+    res.status(400).send('Error updating user');
   }
 });
 
-// PUT /users/:id
-app.put('/users/:id', verifyToken, async (req, res) => {
+// Delete user
+app.delete('/users/:id', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    if (req.body.name) user.name = req.body.name;
-    if (req.body.email) user.email = req.body.email;
-
-    const updatedUser = await user.save();
-    res.json(updatedUser);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+    await User.findByIdAndDelete(req.params.id);
+    res.send('User deleted');
+  } catch (error) {
+    res.status(400).send('Error deleting user');
   }
 });
 
-// DELETE /users/:id
-app.delete('/users/:id', verifyToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    await user.remove();
-    res.json({ message: 'User deleted' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
