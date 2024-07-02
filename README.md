@@ -148,6 +148,42 @@ The server will run on `http://localhost:3000`
 - **Headers:** `auth-token: yourJWTToken`
 - **Description:** Delete a user by their ID. Accessible to authenticated users.
 
+
+## Error Handling and Logging
+
+This project includes comprehensive error handling and logging using Winston.
+
+### Centralized Error Handling Middleware
+
+A centralized error-handling middleware catches and manages errors consistently. It logs errors using Winston and sends a standardized error response to the client.
+
+### Logging with Winston
+
+Winston is used for logging all incoming requests and errors. Logs are written to both a file (`combined.log`) and the console.
+
+### Setup Instructions
+
+1. **Install dependencies:**
+
+    ```sh
+    npm install winston
+    ```
+
+2. **Create centralized error-handling middleware:**
+
+    Create `middlewares/errorHandler.js`.
+
+3. **Integrate logging and error handling in your `app.js`:**
+
+    Set up request logging, define routes, and use the error-handling middleware.
+
+### Accessing Logs
+
+Logs are available in the `combined.log` file and are also printed to the console. Errors are logged in the `error.log` file.
+
+By following these steps, you can ensure that errors are handled gracefully and logged appropriately, making the API more maintainable and easier to debug.
+
+
 ## Testing with Postman
 
 1. **Register a New Admin User:**

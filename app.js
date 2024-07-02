@@ -1,23 +1,42 @@
-// Proposed fix for MongoDB connection options deprecation warnings
-
 const express = require('express');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const swaggerUi = require('swagger-ui-express');
 const specs = require('./swaggerConfig');
+const winston = require('winston');
+const errorHandler = require('./middlewares/errorHandler');
 
 const app = express();
 app.use(express.json());
 
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.printf(({ timestamp, level, message }) => `${timestamp} ${level}: ${message}`)
+  ),
+  transports: [
+    new winston.transports.File({ filename: 'combined.log' }),
+    new winston.transports.Console(),
+  ],
+});
+
+app.use((req, res, next) => {
+  logger.info(`${req.method} ${req.url}`);
+  next();
+});
+
+
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
-// Updated MongoDB connection string without deprecated options
-const dbURL = 'mongodb+srv://zainiqbal35201:zu7MHuHD5vPlGkSC@cluster0.z5tiocc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'
-mongoose.connect(dbURL)
+//mongoDB connection
+const dbURL = 'mongodb+srv://zainiqbal35201:zu7MHuHD5vPlGkSC@cluster0.z5tiocc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+mongoose.connect(dbURL, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => console.log('Error connecting to MongoDB', err));
 
+// User schema and model
 const userSchema = new mongoose.Schema({
   name: String,
   email: { type: String, unique: true },
@@ -28,7 +47,36 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 
 // Register endpoint
-app.post('/register', async (req, res) => {
+/**
+ * @swagger
+ * /register:
+ *   post:
+ *     summary: Register a new user
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - password
+ *               - role
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ */
+app.post('/register', async (req, res, next) => {
   try {
     const { name, email, password, role } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -36,22 +84,45 @@ app.post('/register', async (req, res) => {
     await user.save();
     res.status(201).send('User registered successfully');
   } catch (error) {
-    res.status(400).send('Error registering user');
+    next(error);
   }
 });
 
 // Login endpoint
-app.post('/login', async (req, res) => {
+/**
+ * @swagger
+ * /login:
+ *   post:
+ *     summary: Login a user
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: User authenticated successfully
+ */
+app.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
     if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(400).send('Invalid credentials');
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
     const token = jwt.sign({ userId: user._id, role: user.role }, 'your_jwt_secret');
     res.send({ token });
   } catch (error) {
-    res.status(400).send('Error logging in');
+    next(error);
   }
 });
 
@@ -75,42 +146,123 @@ const roleMiddleware = (role) => (req, res, next) => {
 };
 
 // Protected route - Get all users (Admin only)
-app.get('/admin/users', authMiddleware, roleMiddleware('admin'), async (req, res) => {
-  const users = await User.find();
-  res.send(users);
+/**
+ * @swagger
+ * /admin/users:
+ *   get:
+ *     summary: Get all users (Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of all users
+ */
+app.get('/admin/users', authMiddleware, roleMiddleware('admin'), async (req, res, next) => {
+  try {
+    const users = await User.find();
+    res.send(users);
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Get user by ID
-app.get('/users/:id', authMiddleware, async (req, res) => {
+/**
+ * @swagger
+ * /users/{id}:
+ *   get:
+ *     summary: Get user by ID
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User details
+ */
+app.get('/users/:id', authMiddleware, async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
     res.send(user);
   } catch (error) {
-    res.status(400).send('User not found');
+    next(error);
   }
 });
 
 // Update user
-app.put('/users/:id', authMiddleware, async (req, res) => {
+/**
+ * @swagger
+ * /users/{id}:
+ *   put:
+ *     summary: Update user details
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ */
+app.put('/users/:id', authMiddleware, async (req, res, next) => {
   try {
     const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!user) return res.status(404).json({ message: 'User not found' });
     res.send(user);
   } catch (error) {
-    res.status(400).send('Error updating user');
+    next(error);
   }
 });
 
 // Delete user
-app.delete('/users/:id', authMiddleware, async (req, res) => {
+/**
+ * @swagger
+ * /users/{id}:
+ *   delete:
+ *     summary: Delete user
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ */
+app.delete('/users/:id', authMiddleware, async (req, res, next) => {
   try {
-    await User.findByIdAndDelete(req.params.id);
-    res.send('User deleted');
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.send('User deleted successfully');
   } catch (error) {
-    res.status(400).send('Error deleting user');
+    next(error);
   }
 });
 
+// Error handling middleware
+app.use(errorHandler);
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

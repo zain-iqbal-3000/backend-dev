@@ -1,0 +1,3 @@
+2024-07-02T17:02:29.460Z error: POST /register 500 - Illegal arguments: undefined, number
+2024-07-02T17:03:04.860Z error: POST /register 500 - E11000 duplicate key error collection: test.users index: email_1 dup key: { email: "john@example.com" }
+2024-07-02T17:04:21.892Z error: POST /login 400 - Unexpected token } in JSON at position 58
