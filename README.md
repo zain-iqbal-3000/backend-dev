@@ -26,8 +26,8 @@ This project is a REST API built with Node.js, Express, and MongoDB. It includes
 1. **Clone the repository:**
 
     ```sh
-    git clone https://github.com/yourusername/your-repo-name.git
-    cd your-repo-name
+    git clone https://github.com/zain-iqbal-3000/backend-dev
+    cd backend-dev
     ```
 
 2. **Install dependencies:**
